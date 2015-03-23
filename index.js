@@ -2,20 +2,31 @@ module.exports = function (app) {
     if("master" === app.getServerType()){
         return false;
     }
+
+    var getArgs = function (arguments_, slice) {
+        slice = slice | 0;
+        var l = arguments_.length - slice;
+        var args = new Array(l);
+        for (var i = 0; i < l; i++) {
+            args[i] = arguments_[i + slice]
+        }
+        return args;
+    };
+
     var events = require('pomelo/lib/util/events');
+
     app.event.on(events.START_SERVER, function(){
         app.ipcProxies = {};
 
-        var remotes =  app.components.__remote__.remote.services.user;
-        var modules = app.ipcProxies[app.serverType] = {};
         var wrap_ = function(method, obj){
             return function() {
-                var args = Array.prototype.slice.call(arguments, 1);
-                return obj[method].apply(obj, args);
+                return obj[method].apply(obj, getArgs(arguments, 1));
             };
         };
 
-        var loadAll_ = function(remotes) {
+        var loadAll_ = function() {
+            var remotes =  app.components.__remote__.remote.services.user;
+            var modules = app.ipcProxies[app.serverType] = {};
             for(var remoteName in remotes) {
                 modules[remoteName] = {};
                 var obj = remotes[remoteName];
@@ -27,7 +38,7 @@ module.exports = function (app) {
             }
         };
 
-        loadAll_(remotes);
+        loadAll_();
 
         var pathUtil = require('pomelo/lib/util/pathUtil');
         var remotePath = pathUtil.getUserRemotePath(app.getBase(), app.serverType);
@@ -36,15 +47,12 @@ module.exports = function (app) {
         if(remotePath && reloadRemotes) {
             require("fs").watch(remotePath, function(event) {
                 if(event === "change" ) {
-                    var remotes =  app.components.__remote__.remote.services.user;
-                    loadAll_(remotes);
-                    console.log("[inproc.js] ipc: reload all");
+                    loadAll_();
+                    console.log("[ipc.js] ipc: reload all");
                 }
             });
         }
-        app.__defineGetter__('ipc', function() {
-            return this.ipcProxies;
-        });
+        app.ipc = app.ipcProxies;
 
     })
 };
